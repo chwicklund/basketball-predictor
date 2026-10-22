@@ -216,6 +216,8 @@ td.lead { font-weight: 500; }
 .pill.pos { background: var(--pill-positive-bg); color: var(--pill-positive-ink); }
 .pill.neg { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
 
+.season-log { margin-top: var(--gap); }
+.season-log .show-all { margin-top: 8px; padding: 0; height: 32px; }
 .empty { display: grid; place-items: center; min-height: 96px; padding: 16px; border: 1px dashed var(--control); border-radius: var(--radius-control); color: var(--muted); text-align: center; }
 .skeleton { background: var(--raised); border-radius: 4px; }
 .prose p + p { margin-top: 10px; }

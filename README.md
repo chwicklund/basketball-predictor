@@ -21,6 +21,8 @@ ml/                                       features, training, export (Python)
   train_game.py      train + backtest the game model
   train_player.py    train + backtest the stat models
   export.py          write web/public/data (JSON + ONNX + parity fixtures)
+  predict.py         log today's predictions before tip-off (daily job)
+  grade.py           score the logged predictions against results
   tests/             serving == training features, no leakage
 web/                                      Vite + React + TS app
 .github/workflows/                        nightly refresh, weekly retrain
@@ -61,6 +63,7 @@ npx --prefix web wrangler r2 object put hoops-data/state.tar.gz --file state.tar
 In the GitHub repo, add the secrets `CLOUDFLARE_API_TOKEN` (permissions: *Cloudflare Pages: Edit*, *Workers R2 Storage: Edit*) and `CLOUDFLARE_ACCOUNT_ID`. If you changed the names above, also add the variables `R2_BUCKET` and `PAGES_PROJECT`. Then run **Nightly refresh** once from the Actions tab.
 
 - **Nightly refresh** (10:00 UTC) scrapes the current season's new games, refreshes the players who played, re-exports, uploads the tarball and redeploys. It takes about 20 minutes, almost all of it waiting out the scraper's rate limit.
+- **Daily predictions** (noon US Eastern on weekends and federal holidays, 5 p.m. on other days; see `ml/schedule_time.py`) logs a call for every game on the day's schedule (win probability, projected score, and projections for each rotation player) to `predictions/games.csv` and `predictions/players.csv`, then redeploys. A logged day is never rewritten, and a game that has already tipped off is skipped, so the log is an honest record. The nightly refresh grades it: the Game page lists this season's calls as Right or Wrong, and the Report page compares the live record with the backtest. Run `python -m ml.grade` to print it.
 - **Retrain** (Mondays) refits both models. It only uploads them and deploys if the Python and browser tests pass.
 
 **Cost**: Pages, R2 (under 1 GB of the 10 GB free) and Actions are all free. Keep the repo **private** so the scraper code and any data stay unpublished. About 20 Action minutes a night is roughly 600 of the 2,000 free private-repo minutes a month.

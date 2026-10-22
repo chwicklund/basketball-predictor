@@ -3,13 +3,14 @@ import { useFiles } from "../lib/data";
 import { STAT_LABEL, pct, prettyDate, seasonLabel } from "../lib/format";
 
 export default function AboutPage() {
-  const files = useFiles("meta.json");
+  const files = useFiles("meta.json", "track_record.json");
   if (!files) return <div className="title-row"><div><h1>Model report</h1><p className="finding muted">Loading…</p></div></div>;
   const meta = files["meta.json"];
   const g = meta.game_metrics;
   const pm = meta.player_metrics;
   const stats = Object.keys(pm);
   const beats = stats.filter((s) => pm[s].mae < pm[s].last10_mae).length;
+  const live = files["track_record.json"];
 
   return (
     <>
@@ -86,6 +87,33 @@ export default function AboutPage() {
             The likely range holds 8 in 10 results in principle; whole-number stats like steals and blocks land inside it more often.
             Blocks miss by slightly more than the last-10 average: a mean forecast of a mostly-zero stat loses on absolute error, though it wins on squared error.
           </p>
+        </section>
+
+        <section className="panel span-6" aria-labelledby="live">
+          <header>
+            <h2 id="live">Live track record</h2>
+            <span className="meta">{live.since ? `calls logged before tip-off since ${prettyDate(live.since)}` : "not started"}</span>
+          </header>
+          {live.games && live.correct !== undefined ? (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Measure</th><th className="n">Live</th><th className="n">{seasonLabel(g.test_season)} backtest</th></tr></thead>
+                <tbody>
+                  <tr><td>Winners picked</td><td className="n">{pct(live.correct / live.games, 1)} <span className="muted">({live.correct} of {live.games})</span></td><td className="n">{pct(g.accuracy, 1)}</td></tr>
+                  <tr><td>Log loss</td><td className="n">{live.log_loss!.toFixed(3)}</td><td className="n">{g.log_loss.toFixed(3)}</td></tr>
+                  <tr><td>Margin miss</td><td className="n">{live.margin_mae!.toFixed(1)} pts</td><td className="n">{g.margin_mae.toFixed(1)} pts</td></tr>
+                  {stats.filter((s) => live.players[s]).map((s) => (
+                    <tr key={s}><td>{STAT_LABEL[s]} miss</td><td className="n">{live.players[s].mae.toFixed(2)}</td><td className="n">{pm[s].mae.toFixed(2)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty">
+              {live.pending.length ? `${live.pending.length} calls are waiting on results; the first grades land the morning after.`
+                : "A daily job logs a call for every game before tip-off; results appear here once games are played."}
+            </div>
+          )}
         </section>
 
         <section className="panel span-6 prose" aria-labelledby="how">

@@ -21,6 +21,7 @@ import polars as pl
 from onnxmltools import convert_lightgbm
 from onnxmltools.convert.common.data_types import FloatTensorType
 
+from ml.grade import track_record
 from ml.data import GAMES_DIR, ROOT, load_boxscores, load_games, load_player_logs, player_names
 from ml.player_features import FEATURES, RATE_STATS, ROTATION_MIN, TARGETS
 from ml.roster import lineup_from_roster
@@ -184,6 +185,7 @@ def main():
         "game_metrics": game["metrics"], "player_metrics": player["metrics"],
         "player_test_season": player["test_season"],
     })
+    write_json("track_record.json", track_record(games, logs))
     write_json("fixtures.json", fixtures(teams, players, opponents, gm, boosters, player["quantiles"], args.as_of))
 
 

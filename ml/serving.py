@@ -148,3 +148,9 @@ def win_probability(model, features):
         margin += mw * x
     return 1 / (1 + math.exp(-z)), margin, contrib
 
+
+
+def projected_score(home, away, margin):
+    """(home, away) points: average of each offence and the other side's defence, split by the margin."""
+    total = (home["pts_for"] + away["pts_against"] + away["pts_for"] + home["pts_against"]) / 2
+    return total / 2 + margin / 2, total / 2 - margin / 2

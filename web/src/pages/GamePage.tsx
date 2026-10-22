@@ -2,6 +2,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SwapIcon } from "../components/Icons";
 import RosterCard, { type Toggles } from "../components/RosterCard";
+import SeasonLog from "../components/SeasonLog";
 import TeamSelect from "../components/TeamSelect";
 import { useFiles } from "../lib/data";
 import { gameFeatures, lineupFromRoster, projectedScore, REST_CAP, daysBetween, strength, winProbability } from "../lib/features";
@@ -88,6 +89,7 @@ export default function GamePage() {
             </div>
           </div>
         )}
+        <SeasonLog />
       </>
     );
   }
@@ -147,6 +149,7 @@ export default function GamePage() {
         <RosterCard team={teams[away]} abbr={away} toggles={tg(away)} onChange={(v) => setTeam(away, v)} />
         <RosterCard team={teams[home]} abbr={home} toggles={tg(home)} onChange={(v) => setTeam(home, v)} />
       </div>
+      <SeasonLog />
     </>
   );
 }

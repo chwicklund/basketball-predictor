@@ -51,7 +51,8 @@ jobs:
 
       - name: Upload data
         run: |
-          tar czf state.tar.gz bbref_games bbref_active_players ml/models
+          mkdir -p predictions
+          tar czf state.tar.gz bbref_games bbref_active_players ml/models predictions
           npx --prefix web wrangler r2 object put "$BUCKET/state.tar.gz" --file state.tar.gz --remote
 
       - name: Build and deploy

@@ -11,6 +11,7 @@ import polars as pl
 ROOT = Path(__file__).resolve().parent.parent
 GAMES_DIR = ROOT / "bbref_games"
 PLAYERS_DIR = ROOT / "bbref_active_players"
+PRED_DIR = ROOT / "predictions"  # logged daily predictions (ml.predict), graded by ml.grade
 
 STATS = ["FG", "FGA", "3P", "3PA", "FT", "FTA", "ORB", "DRB", "TRB",
          "AST", "STL", "BLK", "TOV", "PF", "PTS", "GmSc", "+/-"]

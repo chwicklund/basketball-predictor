@@ -1,0 +1,34 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	// One Worker serves the React build (dist/), the admin API and the wager job.
+	"name": "hoops-predictor",
+	"main": "worker/index.js",
+	"compatibility_date": "2026-09-01",
+	"observability": {
+		"enabled": true
+	},
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"]
+	},
+	"triggers": {
+		"crons": [
+			// Wagers: every 10 minutes through the hours that hold 12:10 p.m. and 5:10 p.m. US Eastern
+			// (16-17 and 21-22 UTC cover daylight and standard time); worker/schedule.js picks today's slot.
+			"10,20,30,40,50 16,17,21,22 * * *",
+			// Settle yesterday's wagers after the games are final.
+			"15 10 * * *"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "hoops-predictor"
+		}
+	],
+	"vars": {
+		"KALSHI_BASE": "https://api.elections.kalshi.com/trade-api/v2"
+	}
+}

@@ -1,0 +1,56 @@
+# Logs a prediction for every game on today's schedule before tip-off: at noon
+# US Eastern on weekends and federal holidays (afternoon games), 5 p.m. on other
+# days (ml/schedule_time.py). Then redeploys so the calls show as pending; the
+# nightly refresh grades them. A day that's already logged is never redone.
+name: Daily predictions
+
+on:
+  schedule:
+    # GitHub cron is UTC. Noon Eastern is 16:00 (daylight time) or 17:00 (standard);
+    # 5 p.m. is 21:00 or 22:00. All four fire, and the check below lets through only
+    # a run in today's slot.
+    - cron: "0 16,17,21,22 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: data  # shares the R2 tarball with nightly.yml and retrain.yml
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  BUCKET: ${{ vars.R2_BUCKET || 'hoops-data' }}
+  PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'hoops-predictor' }}
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+
+      - name: Is it today's prediction time?
+        id: clock
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "go=true" >> "$GITHUB_OUTPUT"
+          else python -m ml.schedule_time >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-node@v4
+        if: steps.clock.outputs.go == 'true'
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+
+      - name: Predict and publish
+        if: steps.clock.outputs.go == 'true'
+        run: |
+          pip install -r requirements.txt
+          npm ci --prefix web
+          npx --prefix web wrangler r2 object get "$BUCKET/state.tar.gz" --file state.tar.gz --remote
+          tar xzf state.tar.gz
+          python -m ml.predict
+          python -m ml.export
+          mkdir -p predictions
+          tar czf state.tar.gz bbref_games bbref_active_players ml/models predictions
+          npx --prefix web wrangler r2 object put "$BUCKET/state.tar.gz" --file state.tar.gz --remote
+          cd web && npm run build && npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch main

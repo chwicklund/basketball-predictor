@@ -8,3 +8,4 @@ pyvenv.cfg
 bbref_*/
 __pycache__
 ml/models
+predictions
