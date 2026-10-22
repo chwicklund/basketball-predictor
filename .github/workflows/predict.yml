@@ -11,6 +11,11 @@ on:
     # a run in today's slot.
     - cron: "0 16,17,21,22 * * *"
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Backfill: log this season's already-played games that have no call yet (marked as backfilled), instead of today's games"
+        type: boolean
+        default: false
 
 concurrency:
   group: data  # shares the R2 tarball with nightly.yml and retrain.yml
@@ -50,7 +55,7 @@ jobs:
           npm ci --prefix web
           npx --prefix web wrangler r2 object get "$BUCKET/state.tar.gz" --file state.tar.gz --remote
           tar xzf state.tar.gz
-          python -m ml.predict
+          if [ "${{ inputs.backfill }}" = "true" ]; then python -m ml.predict --backfill; else python -m ml.predict; fi
           python -m ml.export
           mkdir -p predictions
           tar czf state.tar.gz bbref_games bbref_active_players ml/models predictions

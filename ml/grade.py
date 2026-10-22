@@ -43,9 +43,10 @@ def track_record(games, logs, pred_dir=PRED_DIR):
            # [date, visitor, home, p_home, proj_visitor, proj_home, tipoff (ISO UTC or null)]
            "pending": [[r["date"].isoformat(), r["visitor"], r["home"], r["p_home"], r["proj_visitor"], r["proj_home"],
                         _iso(r.get("tipoff"))] for r in pending.iter_rows(named=True)],
-           # [date, visitor, home, p_home, visitor_pts, home_pts]
-           "log": [[r["date"].isoformat(), r["visitor"], r["home"], r["p_home"], r["visitor_pts"], r["home_pts"]]
-                   for r in this_season.reverse().iter_rows(named=True)]}
+           # [date, visitor, home, p_home, visitor_pts, home_pts, backfilled (made after the game, from earlier data)]
+           "log": [[r["date"].isoformat(), r["visitor"], r["home"], r["p_home"], r["visitor_pts"], r["home_pts"],
+                    bool(r.get("backfilled") or 0)] for r in this_season.reverse().iter_rows(named=True)]}
+    out["backfilled"] = int(graded["backfilled"].fill_null(0).sum()) if "backfilled" in graded.columns else 0
     if graded.height:
         p, y = graded["p_home"].to_list(), graded["won"].to_list()
         eps = 1e-6
@@ -76,7 +77,8 @@ def main():
         print(f"No graded games yet ({len(r['pending'])} pending).")
         return
     print(f"Since {r['since']}: {r['correct']} of {r['games']} winners ({r['correct'] / r['games']:.1%}), "
-          f"log loss {r['log_loss']:.3f}, margin miss {r['margin_mae']:.1f}; {len(r['pending'])} pending")
+          f"log loss {r['log_loss']:.3f}, margin miss {r['margin_mae']:.1f}; {len(r['pending'])} pending"
+          + (f"; {r['backfilled']} of the graded calls were backfilled" if r["backfilled"] else ""))
     if r["players"]:
         print(f"Players ({r['player_games']} player-games): " + ", ".join(
             f"{s} {v['mae']:.2f}" for s, v in r["players"].items()))

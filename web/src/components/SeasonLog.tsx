@@ -16,10 +16,11 @@ export default function SeasonLog() {
   const tr = files["track_record.json"];
   const right = tr.log.filter(([, , , p, vp, hp]) => (p >= 0.5) === (hp > vp)).length;
   const rows = [
-    ...tr.pending.map(([date, v, h, p, pv, ph]) => ({ date, v, h, p, final: null as null | [number, number], proj: [pv, ph] })),
-    ...tr.log.map(([date, v, h, p, vp, hp]) => ({ date, v, h, p, final: [vp, hp] as [number, number], proj: null })),
+    ...tr.pending.map(([date, v, h, p, pv, ph]) => ({ date, v, h, p, final: null as null | [number, number], proj: [pv, ph], back: false })),
+    ...tr.log.map(([date, v, h, p, vp, hp, back]) => ({ date, v, h, p, final: [vp, hp] as [number, number], proj: null, back: Boolean(back) })),
   ];
   const shown = all ? rows : rows.slice(0, SHOWN);
+  const backfilled = rows.filter((r) => r.back).length;
 
   return (
     <section className="panel season-log" aria-labelledby="calls">
@@ -45,7 +46,7 @@ export default function SeasonLog() {
                   const ok = r.final && (r.p >= 0.5) === (r.final[1] > r.final[0]);
                   return (
                     <tr key={r.date + r.v + r.h}>
-                      <td>{shortDate(r.date)}</td>
+                      <td>{shortDate(r.date)}{r.back && <span className="muted" title="Backfilled: predicted after the game, from data before it"> †</span>}</td>
                       <td>{r.v} at {r.h}</td>
                       <td className="lead">{pick}</td>
                       <td className="n">{pct(Math.max(r.p, 1 - r.p))}</td>
@@ -68,6 +69,7 @@ export default function SeasonLog() {
           )}
           {tr.since && (
             <p className="small muted" style={{ marginTop: 8 }}>
+              {backfilled > 0 && <>† {backfilled} {backfilled === 1 ? "call was" : "calls were"} backfilled: made after the game, using only data from before it. </>}
               Logged daily before tip-off since {shortDate(tr.since)}, at noon Eastern on weekends and holidays, 5 p.m. other days, assuming each team's usual rotation. Games are graded once the final score is in.
             </p>
           )}
