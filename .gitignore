@@ -9,3 +9,5 @@ bbref_*/
 __pycache__
 ml/models
 predictions
+web/tsconfig.tsbuildinfo
+.wrangler

@@ -11,7 +11,9 @@
 		"directory": "./dist",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
-		"run_worker_first": ["/api/*"]
+		"run_worker_first": [
+			"/api/*"
+		]
 	},
 	"triggers": {
 		"crons": [
@@ -25,7 +27,8 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "hoops-predictor"
+			"database_name": "hoops-predictor",
+			"database_id": "b64edb60-fd95-461a-8d22-c3d211247421"
 		}
 	],
 	"vars": {
