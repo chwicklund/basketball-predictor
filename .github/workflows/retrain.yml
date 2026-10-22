@@ -15,6 +15,9 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   BUCKET: ${{ vars.R2_BUCKET || 'hoops-data' }}
+  # onnxruntime-node (used only by the parity tests) would otherwise fetch optional CUDA
+  # libraries during npm ci on x64 Linux, and that download fails; the CPU build is bundled
+  ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
   retrain:
