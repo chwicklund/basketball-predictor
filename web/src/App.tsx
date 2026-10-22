@@ -1,6 +1,8 @@
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { GameIcon, Mark, PlayerIcon, ReportIcon } from "./components/Icons";
+import { GameIcon, LockIcon, Mark, PlayerIcon, ReportIcon, WagerIcon } from "./components/Icons";
+import { useSession } from "./lib/session";
 import AboutPage from "./pages/AboutPage";
+import AdminPage from "./pages/AdminPage";
 import GamePage from "./pages/GamePage";
 import PlayerPage from "./pages/PlayerPage";
 
@@ -11,6 +13,9 @@ const NAV = [
 ];
 
 export default function App() {
+  const authed = useSession();
+  // Until someone logs in, the page is only "Admin"; what it does stays out of the sidebar
+  const admin = authed ? { label: "Wagers", tip: "Wagers", Icon: WagerIcon } : { label: "Admin", tip: "Admin", Icon: LockIcon };
   return (
     <div className="app">
       <nav className="rail" aria-label="Main">
@@ -20,6 +25,9 @@ export default function App() {
             <Icon /><span className="label">{label}</span>
           </NavLink>
         ))}
+        <NavLink to="/admin" className="rail-item bottom" data-tip={admin.tip} aria-label={admin.tip}>
+          <admin.Icon /><span className="label">{admin.label}</span>
+        </NavLink>
       </nav>
       <main className="canvas">
         <Routes>
@@ -27,6 +35,7 @@ export default function App() {
           <Route path="/game" element={<GamePage />} />
           <Route path="/player" element={<PlayerPage />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/admin" element={<AdminPage />} />
         </Routes>
       </main>
     </div>

@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "npm run build && wrangler deploy",
+    "secrets": "node scripts/push-secrets.mjs",
+    "worker": "npm run build && wrangler dev --test-scheduled",
+    "logs": "wrangler tail"
   },
   "dependencies": {
     "fuse.js": "7.1.0",

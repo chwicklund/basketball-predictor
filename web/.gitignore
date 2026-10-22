@@ -4,3 +4,6 @@ dist
 public/data
 # taste-skill working files (screenshots, direction sheet)
 .taste-skill
+# Local Worker secrets for wrangler dev (never deployed)
+.dev.vars
+.wrangler

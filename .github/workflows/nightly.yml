@@ -17,7 +17,6 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   BUCKET: ${{ vars.R2_BUCKET || 'hoops-data' }}
-  PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'hoops-predictor' }}
 
 jobs:
   refresh:
@@ -60,4 +59,4 @@ jobs:
         run: |
           npm test
           npm run build
-          npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch main
+          npx wrangler deploy

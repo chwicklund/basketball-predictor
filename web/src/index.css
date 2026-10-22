@@ -94,6 +94,7 @@ select.input { padding-right: 28px; }
 .btn.primary { background: var(--primary); color: var(--primary-ink); border-color: transparent; }
 .btn.primary:hover { background: #2a2a2a; }
 .btn.ghost { border-color: transparent; background: transparent; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 .btn svg { width: 16px; height: 16px; }
 .segmented { display: inline-flex; height: var(--control-height); padding: 3px; border-radius: 8px; background: var(--raised); }
 .segmented button { height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; transition: background-color var(--t-hover) ease, color var(--t-hover) ease; }
@@ -217,6 +218,8 @@ td.lead { font-weight: 500; }
 .pill.neg { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
 
 .season-log { margin-top: var(--gap); }
+.login { display: grid; gap: 14px; max-width: 360px; }
+.login .input { width: 100%; }
 .season-log .show-all { margin-top: 8px; padding: 0; height: 32px; }
 .empty { display: grid; place-items: center; min-height: 96px; padding: 16px; border: 1px dashed var(--control); border-radius: var(--radius-control); color: var(--muted); text-align: center; }
 .skeleton { background: var(--raised); border-radius: 4px; }
@@ -245,7 +248,8 @@ td.lead { font-weight: 500; }
   .app { grid-template-columns: minmax(0, 1fr); padding-bottom: 64px; }
   /* the rail becomes a bottom bar with short labels */
   .rail { position: fixed; z-index: 20; top: auto; bottom: 0; left: 0; right: 0; height: 60px; flex-direction: row; justify-content: space-around; padding: 6px 8px; border-right: 0; border-top: 1px solid var(--border); background: var(--surface); }
-  .rail .mark, .rail .bottom { display: none; }
+  .rail .mark { display: none; }
+  .rail .bottom { margin-top: 0; }
   .rail-item { width: auto; min-width: 72px; height: 48px; gap: 2px; align-content: center; }
   .rail-item .label { display: block; font-size: 11px; line-height: 14px; }
   .rail-item[data-tip]:hover::after { content: none; }

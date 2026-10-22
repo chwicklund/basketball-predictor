@@ -26,6 +26,7 @@ async function signingKey(pem) {
 }
 
 async function authHeaders(env, method, url) {
+  if (!env.KALSHI_PRIVATE_KEY || !env.KALSHI_KEY_ID) throw new Error("Kalshi API key is not set (npm run secrets)");
   const { key, alg } = await signingKey(env.KALSHI_PRIVATE_KEY);
   const ts = String(Date.now());
   const path = new URL(url).pathname; // signed path excludes the query string

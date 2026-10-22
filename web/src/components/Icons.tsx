@@ -11,6 +11,12 @@ export const PlayerIcon = () => (
 export const ReportIcon = () => (
   <svg {...base}><path d="M4 20V4M4 20h16" /><path d="M8 16l4-5 3 3 4-6" /></svg>
 );
+export const LockIcon = () => (
+  <svg {...base}><rect x="5" y="10.5" width="14" height="9.5" rx="1.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>
+);
+export const WagerIcon = () => (
+  <svg {...base}><circle cx="12" cy="12" r="8.5" /><path d="M14.5 9.2c-.5-.8-1.4-1.2-2.5-1.2-1.5 0-2.5.8-2.5 1.9 0 2.6 5.2 1.4 5.2 4.2 0 1.1-1.1 1.9-2.7 1.9-1.2 0-2.2-.5-2.7-1.3M12 6.5V8M12 16v1.5" /></svg>
+);
 export const SwapIcon = () => (
   <svg {...base}><path d="M7 7h12l-3-3M17 17H5l3 3" /></svg>
 );

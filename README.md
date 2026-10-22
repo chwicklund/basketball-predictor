@@ -25,6 +25,7 @@ ml/                                       features, training, export (Python)
   grade.py           score the logged predictions against results
   tests/             serving == training features, no leakage
 web/                                      Vite + React + TS app
+  worker/                                 Cloudflare Worker: static site, admin API, daily Kalshi wagers
 .github/workflows/                        nightly refresh, weekly retrain
 ```
 
@@ -47,12 +48,16 @@ Seasons are named by the year they end (2026 = 2025-26). Training uses 2020-21 t
 
 ## Deploying (one-time setup)
 
-Everything runs under one Cloudflare account. The raw CSVs and trained models live in an R2 bucket rather than git, because Sports-Reference's terms don't allow redistributing their data.
+Everything runs under one Cloudflare account. The site is a single Worker (`web/wrangler.jsonc`): it serves the React build,
+the password-protected admin API, and a cron that places the daily wagers, with a D1 database for wager settings and history.
+The raw CSVs, trained models and prediction log live in an R2 bucket rather than git, because Sports-Reference's terms don't
+allow redistributing their data.
 
 ```sh
 cd web
 npx wrangler login
-npx wrangler pages project create hoops-predictor --production-branch main
+npm run deploy          # first time: creates the Worker and the D1 database, and writes its id into wrangler.jsonc (commit that)
+npm run secrets         # Kalshi key + dashboard password copied from ../../kalshi-trader/.env, plus a new session secret
 npx wrangler r2 bucket create hoops-data
 
 # From the repo root: upload the current data and models
@@ -60,13 +65,32 @@ tar czf state.tar.gz bbref_games bbref_active_players ml/models
 npx --prefix web wrangler r2 object put hoops-data/state.tar.gz --file state.tar.gz --remote
 ```
 
-In the GitHub repo, add the secrets `CLOUDFLARE_API_TOKEN` (permissions: *Cloudflare Pages: Edit*, *Workers R2 Storage: Edit*) and `CLOUDFLARE_ACCOUNT_ID`. If you changed the names above, also add the variables `R2_BUCKET` and `PAGES_PROJECT`. Then run **Nightly refresh** once from the Actions tab.
+The site is at the `*.workers.dev` URL `npm run deploy` prints. In the GitHub repo, add the secrets `CLOUDFLARE_API_TOKEN`
+(permissions: *Workers Scripts: Edit*, *D1: Edit*, *Workers R2 Storage: Edit*) and `CLOUDFLARE_ACCOUNT_ID`, and the variable
+`R2_BUCKET` if you named the bucket differently. Then run **Nightly refresh** once from the Actions tab.
 
 - **Nightly refresh** (10:00 UTC) scrapes the current season's new games, refreshes the players who played, re-exports, uploads the tarball and redeploys. It takes about 20 minutes, almost all of it waiting out the scraper's rate limit.
 - **Daily predictions** (noon US Eastern on weekends and federal holidays, 5 p.m. on other days; see `ml/schedule_time.py`) logs a call for every game on the day's schedule (win probability, projected score, and projections for each rotation player) to `predictions/games.csv` and `predictions/players.csv`, then redeploys. A logged day is never rewritten, and a game that has already tipped off is skipped, so the log is an honest record. The nightly refresh grades it: the Game page lists this season's calls as Right or Wrong, and the Report page compares the live record with the backtest. Run `python -m ml.grade` to print it.
 - **Retrain** (Mondays) refits both models. It only uploads them and deploys if the Python and browser tests pass.
 
-**Cost**: Pages, R2 (under 1 GB of the 10 GB free) and Actions are all free. Keep the repo **private** so the scraper code and any data stay unpublished. About 20 Action minutes a night is roughly 600 of the 2,000 free private-repo minutes a month.
+### Wagers (Admin page)
+
+The last item in the sidebar reads **Admin** until you log in with kalshi-trader's dashboard password, then **Wagers**.
+When **Run daily** is on, the Worker's cron (`web/worker/`) buys the predicted winner's YES contract on Kalshi's
+`KXNBAGAME` market for every game that day, 10 minutes after the predictions (12:10 p.m. ET weekends and holidays, 5:10 p.m.
+otherwise), for the set amount (default $1, $1-$100), as an immediate-or-cancel order at the asking price sized so cost plus
+fee stays within the amount. It funds the market's balance shard from your other shards the way kalshi-trader does. It
+starts **stopped and in dry run**; dry runs record the order they would have placed, and are graded too. If the predictions
+haven't been deployed by the slot, it retries every 10 minutes until 2 hours after it. A game is wagered at most once per mode,
+and never after its tip-off.
+
+```sh
+cd web
+npm run worker          # local Worker + local D1 on :8787 (put DASHBOARD_PASSWORD and SESSION_SECRET in web/.dev.vars)
+npm run logs            # tail the deployed Worker
+```
+
+**Cost**: Workers, D1, R2 (under 1 GB of the 10 GB free) and Actions are all free. Keep the repo **private** so the scraper code and any data stay unpublished. About 20 Action minutes a night is roughly 600 of the 2,000 free private-repo minutes a month.
 
 ## Accuracy (2025-26 test season)
 
