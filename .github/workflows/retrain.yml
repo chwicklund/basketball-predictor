@@ -1,0 +1,59 @@
+# Retrains both models on all data so far. Models are only kept if the Python
+# and browser parity tests pass.
+name: Retrain
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"  # Mondays, after the nightly refresh
+  workflow_dispatch:
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  BUCKET: ${{ vars.R2_BUCKET || 'hoops-data' }}
+  PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'hoops-predictor' }}
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: pip install -r requirements.txt
+      - run: npm ci
+        working-directory: web
+
+      - name: Download data and models
+        run: |
+          npx --prefix web wrangler r2 object get "$BUCKET/state.tar.gz" --file state.tar.gz --remote
+          tar xzf state.tar.gz
+
+      - name: Train
+        run: |
+          python -m ml.train_game
+          python -m ml.train_player
+
+      - name: Test
+        run: |
+          python -m pytest ml/tests -q
+          python -m ml.export
+          npm test --prefix web
+
+      - name: Upload models
+        run: |
+          tar czf state.tar.gz bbref_games bbref_active_players ml/models
+          npx --prefix web wrangler r2 object put "$BUCKET/state.tar.gz" --file state.tar.gz --remote
+
+      - name: Build and deploy
+        working-directory: web
+        run: |
+          npm run build
+          npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch main

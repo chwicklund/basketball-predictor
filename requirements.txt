@@ -1,0 +1,10 @@
+numpy
+pandas
+polars
+scikit-learn
+lightgbm
+onnx
+onnxmltools
+skl2onnx
+onnxruntime
+pytest

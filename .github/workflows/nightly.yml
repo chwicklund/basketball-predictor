@@ -1,0 +1,62 @@
+# Adds last night's games, rebuilds the site's data and redeploys. No retraining.
+#
+# Raw CSVs and trained models aren't in git; they live in R2 as one tarball
+# (see README.md for the one-time upload).
+name: Nightly refresh
+
+on:
+  schedule:
+    - cron: "0 10 * * *"  # 10:00 UTC, after West Coast games finish
+  workflow_dispatch:
+
+concurrency:
+  group: data  # never run alongside retrain.yml: both write the same tarball
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  BUCKET: ${{ vars.R2_BUCKET || 'hoops-data' }}
+  PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'hoops-predictor' }}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: pip install -r requirements.txt
+      - run: npm ci
+        working-directory: web
+
+      - name: Download data and models
+        run: |
+          npx --prefix web wrangler r2 object get "$BUCKET/state.tar.gz" --file state.tar.gz --remote
+          tar xzf state.tar.gz
+
+      - name: Scrape new games
+        # Sequential on purpose: basketball-reference allows ~20 requests a minute in total
+        run: |
+          SEASON=$(python -c "import datetime as d; t = d.date.today(); print(t.year + 1 if t.month >= 8 else t.year)")
+          SINCE=$(date -u -d '2 days ago' +%F)
+          python bbref_games.py --from-season "$SEASON" --to-season "$SEASON"
+          python bbref_active_players.py -t per_game_stats totals_stats advanced -g --update bbref_games --since "$SINCE"
+
+      - name: Export site data
+        run: python -m ml.export
+
+      - name: Upload data
+        run: |
+          tar czf state.tar.gz bbref_games bbref_active_players ml/models
+          npx --prefix web wrangler r2 object put "$BUCKET/state.tar.gz" --file state.tar.gz --remote
+
+      - name: Build and deploy
+        working-directory: web
+        run: |
+          npm test
+          npm run build
+          npx wrangler pages deploy dist --project-name "$PAGES_PROJECT" --branch main
