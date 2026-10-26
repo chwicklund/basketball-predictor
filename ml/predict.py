@@ -5,8 +5,11 @@ player to predictions/players.csv. A day that's already logged is left alone,
 so a rerun can never replace a prediction after tip-off. ml.grade scores the
 log against results once the nightly refresh has scraped them.
 
-Predictions assume each team's expected rotation (nobody known to be out),
-which is what the site shows before any toggles.
+Each team's expected rotation is adjusted by the NBA's official injury report
+(ml/injuries.py): players listed Out or Doubtful in the latest report before
+the run are dropped from the game model's lineup, get no stat projection, and
+their usual minutes count as vacated for teammates. If the report can't be
+read, everyone is assumed available and the log says so.
 
 --backfill logs the current season's already-played games that have no call
 yet, one day at a time, each from only the data before that day (the models
@@ -24,6 +27,7 @@ import csv
 import datetime
 import functools
 import hashlib
+import os
 import pickle
 import re
 from pathlib import Path
@@ -34,15 +38,18 @@ import polars as pl
 
 from ml.data import GAMES_DIR, PRED_DIR, load_boxscores, load_games, load_player_logs, player_names
 from ml.export import game_model_json, stat_projection
+from ml.injuries import name_key, out_as_of
+from ml.roster import lineup_from_roster
+from ml.schedule_time import due_hour
 from ml.player_features import FEATURES, ROTATION_MIN, TARGETS
 from ml.serving import build_states, game_features, player_features, projected_score, season_for, win_probability
 from ml.train_game import MODEL_DIR
 
 GAME_COLUMNS = ["date", "made_at", "model", "visitor", "home", "p_home", "pick", "proj_visitor", "proj_home", "margin",
-                "tipoff", "backfilled"]
+                "tipoff", "backfilled", "out_visitor", "out_home", "injury_report"]
 ET = ZoneInfo("America/New_York")
 PLAYER_COLUMNS = (["date", "made_at", "model", "player_id", "player", "team", "opp", "is_home"]
-                  + [f"{s}{k}" for s in TARGETS for k in ("", "_p10", "_p90")] + ["backfilled"])
+                  + [f"{s}{k}" for s in TARGETS for k in ("", "_p10", "_p90")] + ["backfilled", "vacated_min"])
 
 
 def model_version():
@@ -99,11 +106,15 @@ def _context():
     return {"gm": game_model_json(game), "quantiles": player["quantiles"],
             "boosters": {s: lgb.Booster(model_str=m) for s, m in player["models"].items()},
             "logs": logs, "games": games, "box": box, "names": player_names(logs, box, games),
+            "team_names": dict(games.select("home_abbr", "home").unique("home_abbr", keep="last").iter_rows()),
             "version": model_version()}
 
 
-def log_day(day, slate, out_dir=PRED_DIR, backfilled=False):
-    """Predict `slate` [(visitor, home, tipoff or None)] as of the start of `day` and append it to the log."""
+def log_day(day, slate, out_dir=PRED_DIR, backfilled=False, report_time=None):
+    """Predict `slate` [(visitor, home, tipoff or None)] as of the start of `day` and append it to the log.
+
+    Injuries come from the latest report at or before `report_time` (default: now).
+    """
     games_path, players_path = out_dir / "games.csv", out_dir / "players.csv"
     date = day.isoformat()
     if date in logged_dates(games_path):
@@ -118,27 +129,41 @@ def log_day(day, slate, out_dir=PRED_DIR, backfilled=False):
     season = season_for(day)
     made_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     flag = int(backfilled)
+    inj = out_as_of(report_time or datetime.datetime.now(ET), teams, ctx["team_names"])
+    if inj.get("error"):
+        print(f"  injury report unavailable ({inj['error']}); assuming everyone plays")
+    else:
+        print(f"  injury report {inj['report']}: {sum(len(v) for v in inj['out'].values())} players out or doubtful")
+    out_keys = {t: {name_key(n) for n in names} for t, names in inj["out"].items()}
 
     game_rows, player_rows = [], []
     for visitor, home, tip in slate:
         if home not in teams or visitor not in teams:
             print(f"  skipping {visitor} at {home}: no history for one of the teams")
             continue
-        p, margin, _ = win_probability(ctx["gm"], game_features(teams[home], teams[visitor], date))
+        out = {t: inj["out"].get(t, []) for t in (home, visitor)}
+        lineups = {t: lineup_from_roster(teams[t]["roster"], out=out[t]) for t in (home, visitor)}
+        p, margin, _ = win_probability(ctx["gm"], game_features(teams[home], teams[visitor], date, 0,
+                                                                lineups[home], lineups[visitor]))
         ph, pv = projected_score(teams[home], teams[visitor], margin)
         game_rows.append({"date": date, "made_at": made_at, "model": ctx["version"], "visitor": visitor, "home": home,
                           "p_home": round(p, 4), "pick": home if p >= 0.5 else visitor,
                           "proj_visitor": round(pv, 1), "proj_home": round(ph, 1), "margin": round(margin, 2),
-                          "tipoff": tip.astimezone(datetime.timezone.utc).isoformat() if tip else "", "backfilled": flag})
+                          "tipoff": tip.astimezone(datetime.timezone.utc).isoformat() if tip else "", "backfilled": flag,
+                          "out_visitor": "; ".join(out[visitor]), "out_home": "; ".join(out[home]),
+                          "injury_report": inj["report"] or "unavailable"})
         for team, opp, is_home in ((home, visitor, 1), (visitor, home, 0)):
             rotation = [pid for pid, q in players.items()
                         if q["team"] == team and q["st_season"] >= season - 1 and q["st_min_l10"] >= ROTATION_MIN]
-            for pid in rotation:
-                f = player_features(players[pid], teams[team], teams[opp], opponents[opp], date, is_home)
+            is_out = lambda pid: name_key(ctx["names"].get(pid, players[pid]["player"])) in out_keys.get(team, set())
+            # Out players get no projection; their usual minutes go to the teammates who play
+            vacated = sum(players[pid]["st_min_l10"] for pid in rotation if is_out(pid))
+            for pid in [pid for pid in rotation if not is_out(pid)]:
+                f = player_features(players[pid], teams[team], teams[opp], opponents[opp], date, is_home, vacated)
                 proj = stat_projection(ctx["boosters"], ctx["quantiles"], [f[c] for c in FEATURES])
                 row = {"date": date, "made_at": made_at, "model": ctx["version"], "player_id": pid,
                        "player": ctx["names"].get(pid, players[pid]["player"]), "team": team, "opp": opp,
-                       "is_home": is_home, "backfilled": flag}
+                       "is_home": is_home, "backfilled": flag, "vacated_min": round(vacated, 1)}
                 for s in TARGETS:
                     row |= {s: round(proj[s]["mean"], 2), f"{s}_p10": round(proj[s]["p10"], 1), f"{s}_p90": round(proj[s]["p90"], 1)}
                 player_rows.append(row)
@@ -185,7 +210,9 @@ def backfill(out_dir=PRED_DIR, today=None):
     total = [0, 0]
     for (day,), g in played.sort("date", "game_id").group_by("date", maintain_order=True):
         slate = [(v, h, tipoff(day, t)) for v, h, t in g.select("visitor_abbr", "home_abbr", "start_et").rows()]
-        n = log_day(day, slate, out_dir, backfilled=True)
+        # The injury report as it stood at that day's prediction slot, as the daily job would have read it
+        slot = datetime.datetime.combine(day, datetime.time(due_hour(day), 0), ET)
+        n = log_day(day, slate, out_dir, backfilled=True, report_time=slot)
         total = [total[0] + n[0], total[1] + n[1]]
     print(f"Backfill done: {total[0]} games and {total[1]} player projections added.")
     return tuple(total)
@@ -201,10 +228,11 @@ def main():
     ap.add_argument("--backfill", action="store_true",
                     help="log this season's already-played games that have no call yet (marked backfilled)")
     args = ap.parse_args()
-    if args.backfill:
-        backfill(args.out)
-    else:
-        predict_day(args.date, args.schedule, args.out)
+    games_logged, _ = backfill(args.out) if args.backfill else predict_day(args.date, args.schedule, args.out)
+    # In GitHub Actions, tell the workflow whether there's anything new to publish
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"logged={games_logged}\n")
 
 
 if __name__ == "__main__":

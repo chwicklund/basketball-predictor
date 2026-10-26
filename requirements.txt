@@ -8,3 +8,4 @@ onnxmltools
 skl2onnx
 onnxruntime
 pytest
+nbainjuries   # official NBA injury report; needs Java (JAVA_HOME)

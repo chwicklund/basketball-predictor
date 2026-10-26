@@ -22,6 +22,8 @@ from onnxmltools import convert_lightgbm
 from onnxmltools.convert.common.data_types import FloatTensorType
 
 from ml.grade import track_record
+from ml.injuries import ET, out_as_of
+from ml.schedule_time import due_hour
 from ml.data import GAMES_DIR, ROOT, load_boxscores, load_games, load_player_logs, player_names
 from ml.player_features import FEATURES, RATE_STATS, ROTATION_MIN, TARGETS
 from ml.roster import lineup_from_roster
@@ -186,6 +188,12 @@ def main():
         "player_test_season": player["test_season"],
     })
     write_json("track_record.json", track_record(games, logs))
+    # The latest injury report (or the one at that day's slot, for a past --as-of), for the pages' default lineups
+    now = datetime.datetime.now(ET)
+    report_time = now if args.as_of >= now.date() else datetime.datetime.combine(args.as_of, datetime.time(due_hour(args.as_of)), ET)
+    injuries = out_as_of(report_time, teams, names)
+    print(f"  injury report: {injuries['report'] or injuries.get('error')}")
+    write_json("injuries.json", injuries)
     write_json("fixtures.json", fixtures(teams, players, opponents, gm, boosters, player["quantiles"], args.as_of))
 
 

@@ -1,12 +1,16 @@
 .env
-bin
-include
-lib
-lib64
-local
-pyvenv.cfg
+# The Python virtualenv lives in the repo root. Anchor its folders with a leading slash,
+# or they also match source folders such as web/src/lib.
+/bin
+/include
+/lib
+/lib64
+/local
+/share
+/pyvenv.cfg
 bbref_*/
 __pycache__
+.pytest_cache
 ml/models
 predictions
 web/tsconfig.tsbuildinfo

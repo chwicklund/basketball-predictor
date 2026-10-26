@@ -1,15 +1,17 @@
-# Logs a prediction for every game on today's schedule before tip-off: at noon
+# Logs a prediction for every game on today's schedule before tip-off: from noon
 # US Eastern on weekends and federal holidays (afternoon games), 5 p.m. on other
 # days (ml/schedule_time.py). Then redeploys so the calls show as pending; the
-# nightly refresh grades them. A day that's already logged is never redone.
+# nightly refresh grades them. A day that's already logged is never redone, and a
+# game that has tipped off is skipped, so the first run after the slot does the work.
 name: Daily predictions
 
 on:
   schedule:
-    # GitHub cron is UTC. Noon Eastern is 16:00 (daylight time) or 17:00 (standard);
-    # 5 p.m. is 21:00 or 22:00. All four fire, and the check below lets through only
-    # a run in today's slot.
-    - cron: "0 16,17,21,22 * * *"
+    # GitHub cron is UTC and often starts scheduled runs late (hours, at busy times), so
+    # check every half hour from noon Eastern into the evening, off the busy top of the
+    # hour. Runs before today's slot stop at the first step; later ones find the day
+    # already logged and publish nothing.
+    - cron: "7,37 16-23 * * *"
   workflow_dispatch:
     inputs:
       backfill:
@@ -35,8 +37,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # No pip cache here: on runs that stop at the time check nothing is installed,
+      # and the cache's cleanup step then fails the run
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12", cache: pip }
+        with: { python-version: "3.12" }
 
       - name: Is it today's prediction time?
         id: clock
@@ -44,18 +48,28 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "go=true" >> "$GITHUB_OUTPUT"
           else python -m ml.schedule_time >> "$GITHUB_OUTPUT"; fi
 
+      # nbainjuries reads the NBA injury report PDF with tabula, which needs Java (JAVA_HOME)
+      - uses: actions/setup-java@v4
+        if: steps.clock.outputs.go == 'true'
+        with: { distribution: temurin, java-version: "17" }
       - uses: actions/setup-node@v4
         if: steps.clock.outputs.go == 'true'
         with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
 
-      - name: Predict and publish
+      - name: Predict
+        id: predict
         if: steps.clock.outputs.go == 'true'
         run: |
           pip install -r requirements.txt
           npm ci --prefix web
           npx --prefix web wrangler r2 object get "$BUCKET/state.tar.gz" --file state.tar.gz --remote
           tar xzf state.tar.gz
+          # Writes logged=<games added> to $GITHUB_OUTPUT
           if [ "${{ inputs.backfill }}" = "true" ]; then python -m ml.predict --backfill; else python -m ml.predict; fi
+
+      - name: Publish
+        if: steps.clock.outputs.go == 'true' && steps.predict.outputs.logged != '0'
+        run: |
           python -m ml.export
           mkdir -p predictions
           tar czf state.tar.gz bbref_games bbref_active_players ml/models predictions

@@ -4,7 +4,9 @@
 export const WEEKEND_HOUR = 12;
 export const WEEKDAY_HOUR = 17;
 export const WAGER_DELAY_MIN = 10;
-export const WAGER_WINDOW_MIN = 110; // keep retrying this long after the slot if predictions aren't deployed yet
+// After the slot, keep checking until the end of the Eastern day: GitHub can start the prediction job hours
+// late, and a game that has tipped off is never wagered, so a late check can only catch games still to come.
+export const DAY_END_MIN = 24 * 60 - 1;
 
 const ET = "America/New_York";
 
@@ -51,5 +53,5 @@ export function wagerWindow(now = Date.now()) {
   const { date, minutes } = easternNow(now);
   const start = dueHour(date) * 60 + WAGER_DELAY_MIN;
   const h = Math.floor(start / 60), mm = String(start % 60).padStart(2, "0");
-  return { date, open: minutes >= start && minutes <= start + WAGER_WINDOW_MIN, slot: `${h > 12 ? h - 12 : h}:${mm} ${h >= 12 ? "p.m." : "a.m."} ET` };
+  return { date, open: minutes >= start && minutes <= DAY_END_MIN, slot: `${h > 12 ? h - 12 : h}:${mm} ${h >= 12 ? "p.m." : "a.m."} ET` };
 }

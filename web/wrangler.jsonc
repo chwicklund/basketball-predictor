@@ -17,9 +17,11 @@
 	},
 	"triggers": {
 		"crons": [
-			// Wagers: every 10 minutes through the hours that hold 12:10 p.m. and 5:10 p.m. US Eastern
-			// (16-17 and 21-22 UTC cover daylight and standard time); worker/schedule.js picks today's slot.
-			"10,20,30,40,50 16,17,21,22 * * *",
+			// Wagers: every 10 minutes from noon US Eastern to late evening (16:00-03:59 UTC covers daylight and
+			// standard time). worker/schedule.js waits for today's slot (12:10 or 5:10 p.m.), then wagers each
+			// game once, as soon as the day's predictions are deployed and before that game tips off.
+			"*/10 16-23 * * *",
+			"*/10 0-3 * * *",
 			// Settle yesterday's wagers after the games are final.
 			"15 10 * * *"
 		]

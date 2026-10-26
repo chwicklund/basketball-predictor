@@ -15,7 +15,7 @@ const sigmoid = (z: number) => 1 / (1 + Math.exp(-z));
 const short = (name: string) => name.split(" ").slice(-1)[0];
 
 export default function GamePage() {
-  const files = useFiles("meta.json", "teams.json", "game_model.json", "schedule.json", "game_backtest.json");
+  const files = useFiles("meta.json", "teams.json", "game_model.json", "schedule.json", "game_backtest.json", "injuries.json");
   const [params, setParams] = useSearchParams();
   const [playoff, setPlayoff] = useState(false);
   const [toggles, setToggles] = useState<Record<string, Toggles>>({});
@@ -36,7 +36,10 @@ export default function GamePage() {
   if (!files || !meta) return <Loading />;
   const teams = files["teams.json"];
   const model = files["game_model.json"];
-  const tg = (t: string) => toggles[t] ?? NONE;
+  // Upcoming games start from the injury report: its Out and Doubtful players are switched off
+  const injuries = files["injuries.json"];
+  const reported = (t: string) => (injuries.out[t] ?? []).filter((n) => teams[t].roster.some((r) => r.name === n && r.in_pool));
+  const tg = (t: string) => toggles[t] ?? (past ? NONE : { out: reported(t), add: [] });
   const setTeam = (t: string, v: Toggles) => setToggles({ ...toggles, [t]: v });
 
   const controls = (
@@ -102,12 +105,14 @@ export default function GamePage() {
   const fav = pred.pHome >= 0.5 ? home : away;
   const pFav = fav === home ? pred.pHome : 1 - pred.pHome;
 
-  const outNames = [...tg(home).out, ...tg(away).out];
+  // Who's missing on each side (injury report or toggles), and what that does to the home team's chances
+  const missing = [home, away].filter((t) => tg(t).out.length)
+    .map((t) => `${tg(t).out.map(short).join(", ")} (${t})`);
   const shift = (pred.pHome - base.pHome) * 100;
   const finding = `${teams[fav].name} win ${pct(pFav)} of the time${fav === home ? " at home" : " on the road"}, `
     + `projected ${Math.round(Math.max(score.home, score.away))}–${Math.round(Math.min(score.home, score.away))}.`
-    + (Math.abs(shift) >= 0.1 && outNames.length
-      ? ` Without ${outNames.map(short).join(", ")}, ${teams[home].name}' chances ${shift < 0 ? "fall" : "rise"} ${one(Math.abs(shift))} points.`
+    + (missing.length && Math.abs(shift) >= 0.1
+      ? ` Missing ${missing.join(" and ")} moves the ${teams[home].name}' chances ${shift < 0 ? "down" : "up"} ${one(Math.abs(shift))} points.`
       : "");
 
   return (
@@ -146,8 +151,10 @@ export default function GamePage() {
           </p>
         </section>
 
-        <RosterCard team={teams[away]} abbr={away} toggles={tg(away)} onChange={(v) => setTeam(away, v)} />
-        <RosterCard team={teams[home]} abbr={home} toggles={tg(home)} onChange={(v) => setTeam(home, v)} />
+        <RosterCard team={teams[away]} abbr={away} toggles={tg(away)} onChange={(v) => setTeam(away, v)}
+          reported={reported(away)} report={injuries.report} />
+        <RosterCard team={teams[home]} abbr={home} toggles={tg(home)} onChange={(v) => setTeam(home, v)}
+          reported={reported(home)} report={injuries.report} />
       </div>
       <SeasonLog />
     </>

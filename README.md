@@ -15,6 +15,7 @@ ml/                                       features, training, export (Python)
   data.py            load the CSVs
   elo.py             team Elo
   roster.py          roster strength from box scores (who plays, weighted by minutes)
+  injuries.py        who's out, from the NBA's official injury report (nbainjuries; needs Java)
   team_features.py   pre-game team features
   player_features.py pre-game player features
   serving.py         current state + feature assembly (the reference for web/src/lib/features.ts)
@@ -33,6 +34,7 @@ web/                                      Vite + React + TS app
 
 ```sh
 pip install -r requirements.txt
+# The injury report reader needs Java: install a JRE and set JAVA_HOME
 python -m ml.train_game          # ~1 s; prints the 2025-26 backtest
 python -m ml.train_player        # ~1 min
 python -m ml.export              # writes web/public/data
@@ -70,7 +72,7 @@ The site is at the `*.workers.dev` URL `npm run deploy` prints. In the GitHub re
 `R2_BUCKET` if you named the bucket differently. Then run **Nightly refresh** once from the Actions tab.
 
 - **Nightly refresh** (10:00 UTC) scrapes the current season's new games, refreshes the players who played, re-exports, uploads the tarball and redeploys. It takes about 20 minutes, almost all of it waiting out the scraper's rate limit.
-- **Daily predictions** (noon US Eastern on weekends and federal holidays, 5 p.m. on other days; see `ml/schedule_time.py`) logs a call for every game on the day's schedule (win probability, projected score, and projections for each rotation player) to `predictions/games.csv` and `predictions/players.csv`, then redeploys. A logged day is never rewritten, and a game that has already tipped off is skipped, so the log is an honest record. The nightly refresh grades it: the Game page lists this season's calls as Right or Wrong, and the Report page compares the live record with the backtest. Run `python -m ml.grade` to print it. To log calls for games already played this season (say, before the job was set up), run **Daily predictions** by hand with **Backfill** ticked: each day is predicted from only the data before it, and those calls are marked † as backfilled.
+- **Daily predictions** (noon US Eastern on weekends and federal holidays, 5 p.m. on other days; see `ml/schedule_time.py`) logs a call for every game on the day's schedule (win probability, projected score, and projections for each rotation player) to `predictions/games.csv` and `predictions/players.csv`, then redeploys. A logged day is never rewritten, and a game that has already tipped off is skipped, so the log is an honest record. The nightly refresh grades it: the Game page lists this season's calls as Right or Wrong, and the Report page compares the live record with the backtest. Each call reads the NBA's official injury report as it stood at the time (`ml/injuries.py`): players listed Out or Doubtful are dropped from their team's rotation and their minutes go to teammates, and the log records who was assumed out and which report it came from. The Game and Player pages start from the same report (switch anyone back on if they'll play). Run `python -m ml.grade` to print it. To log calls for games already played this season (say, before the job was set up), run **Daily predictions** by hand with **Backfill** ticked: each day is predicted from only the data before it, and those calls are marked † as backfilled.
 - **Retrain** (Mondays) refits both models. It only uploads them and deploys if the Python and browser tests pass.
 
 ### Wagers (Admin page)
@@ -81,7 +83,7 @@ When **Run daily** is on, the Worker's cron (`web/worker/`) buys the predicted w
 otherwise), for the set amount (default $1, $1-$100), as an immediate-or-cancel order at the asking price sized so cost plus
 fee stays within the amount. It funds the market's balance shard from your other shards the way kalshi-trader does. It
 starts **stopped and in dry run**; dry runs record the order they would have placed, and are graded too. If the predictions
-haven't been deployed by the slot, it retries every 10 minutes until 2 hours after it. A game is wagered at most once per mode,
+haven't been deployed by the slot (GitHub sometimes starts the prediction job late), it keeps checking every 10 minutes through the evening. A game is wagered at most once per mode,
 and never after its tip-off.
 
 ```sh

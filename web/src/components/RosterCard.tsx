@@ -1,5 +1,5 @@
 import { strength } from "../lib/features";
-import { one } from "../lib/format";
+import { one, reportTime } from "../lib/format";
 import type { RosterEntry, TeamState } from "../lib/types";
 
 export interface Toggles {
@@ -14,8 +14,10 @@ const SUFFIX = new Set(["Jr.", "Sr.", "II", "III", "IV"]);
 const surname = (name: string) => name.split(" ").filter((w) => !SUFFIX.has(w)).slice(-1)[0];
 
 /** A team's rotation as 240 minutes split by who plays, with each player's toggle. */
-export default function RosterCard({ team, abbr, toggles, onChange }: {
+export default function RosterCard({ team, abbr, toggles, onChange, reported = [], report = null }: {
   team: TeamState; abbr: string; toggles: Toggles; onChange: (t: Toggles) => void;
+  reported?: string[];      // players the injury report lists Out or Doubtful
+  report?: string | null;   // when that report was published
 }) {
   const playing = (r: RosterEntry) => (r.in_pool && !toggles.out.includes(r.name)) || toggles.add.includes(r.name);
   const lineup = team.roster.filter(playing);
@@ -69,6 +71,11 @@ export default function RosterCard({ team, abbr, toggles, onChange }: {
             {listed.map(row)}
             {team.roster.filter((r) => toggles.add.includes(r.name)).map(row)}
           </ul>
+          {reported.length > 0 && report && (
+            <p className="small muted" style={{ marginTop: 6 }}>
+              Injury report, {reportTime(report)} ET: {reported.join(", ")} {reported.length === 1 ? "is" : "are"} out or doubtful.
+            </p>
+          )}
           <p className="roster-change small">
             {lost > 0.05 ? <>Absences cost <b>{one(lost)}</b> Game Score a game.</>
               : lost < -0.05 ? <>Changes add <b>{one(-lost)}</b> Game Score a game.</>

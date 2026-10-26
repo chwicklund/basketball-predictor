@@ -1,5 +1,8 @@
-"""When the daily predictions should run: noon Eastern on weekends and US
-federal holidays (when the NBA plays afternoon games), 5 p.m. on other days.
+"""When the daily predictions should run: from noon Eastern on weekends and US
+federal holidays (when the NBA plays afternoon games), from 5 p.m. on other days.
+Any run after that hour is due: the predictor never redoes a logged day and skips
+games that have tipped off, so the first run after the slot (GitHub often starts
+scheduled runs late) logs the day and the rest change nothing.
 
 Standard library only, so the workflow can ask before installing anything.
 
@@ -14,7 +17,6 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 WEEKEND_HOUR = 12
 WEEKDAY_HOUR = 17
-WINDOW = 1  # also go up to this many hours late, in case GitHub starts the run late
 
 
 def _nth_weekday(year, month, weekday, n):
@@ -51,8 +53,7 @@ def due_hour(day):
 
 def is_due(now=None):
     now = now or datetime.datetime.now(ET)
-    hour = due_hour(now.date())
-    return hour <= now.hour <= hour + WINDOW
+    return now.hour >= due_hour(now.date())
 
 
 if __name__ == "__main__":

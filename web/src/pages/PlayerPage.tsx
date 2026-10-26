@@ -20,7 +20,7 @@ const l10 = (p: PlayerState, s: string) => (s === "MIN" ? p.st_min_l10 : p[`st_l
 
 export default function PlayerPage() {
   const files = useFiles("meta.json", "players.json", "teams.json", "opponents.json", "quantiles.json",
-    "feature_spec.json", "schedule.json", "history.json");
+    "feature_spec.json", "schedule.json", "history.json", "injuries.json");
   const [params, setParams] = useSearchParams();
   const [out, setOut] = useState<string[]>([]);
   const [minutes, setMinutes] = useState("");
@@ -42,7 +42,6 @@ export default function PlayerPage() {
   const set = (patch: Record<string, string>) =>
     setParams({ p: pid ?? "", opp, date, home: String(isHome), ...patch }, { replace: true });
 
-  useEffect(() => { setOut([]); setMinutes(""); }, [pid]);
 
   const teammates = useMemo(() => {
     if (!players || !p || !meta || !files) return [];
@@ -52,6 +51,16 @@ export default function PlayerPage() {
       .sort((a, b) => (b[1].st_min_l10 as number) - (a[1].st_min_l10 as number))
       .slice(0, 7);
   }, [players, p, pid, meta, files]);
+
+  // Teammates the injury report lists Out or Doubtful start switched off
+  const reportedOut = useMemo(() => {
+    if (!files || !p) return [] as string[];
+    const names = new Set(files["injuries.json"].out[p.team] ?? []);
+    // Only the listed rotation teammates: others don't change his projection
+    return teammates.filter(([, q]) => names.has(q.player)).map(([id]) => id);
+  }, [files, p, teammates]);
+  const selfOut = Boolean(p && files && (files["injuries.json"].out[p.team] ?? []).includes(p.player));
+  useEffect(() => { setOut(reportedOut); setMinutes(""); }, [pid, reportedOut]);
 
   useEffect(() => {
     if (!files || !p || past) return;
@@ -83,7 +92,8 @@ export default function PlayerPage() {
   const pts = proj?.PTS.mean;
   const finding = past ? `How his ${seasonLabel(meta.player_test_season)} projection ${where} on ${prettyDate(date)} compared with what he did.`
     : pts === undefined ? `Projecting ${where}…`
-    : `Projects ${one(pts)} points, ${one(proj!.TRB.mean)} rebounds and ${one(proj!.AST.mean)} assists ${where}, `
+    : (selfOut ? "The NBA injury report lists him out or doubtful; if he plays, he " : "")
+      + `${selfOut ? "projects" : "Projects"} ${one(pts)} points, ${one(proj!.TRB.mean)} rebounds and ${one(proj!.AST.mean)} assists ${where}, `
       + `${signed(pts - l10(p, "PTS"))} points against his last-10 average.`;
 
   return (

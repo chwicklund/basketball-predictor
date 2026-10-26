@@ -17,12 +17,13 @@ describe("schedule (mirrors ml/schedule_time.py)", () => {
     expect([...usHolidays(2027)].sort().slice(0, 4)).toEqual(["2027-01-01", "2027-01-18", "2027-02-15", "2027-05-31"]);
   });
 
-  it("opens the wager window 10 minutes after the predictions, in Eastern time", () => {
-    // Saturday 24 Oct 2026, daylight time (UTC-4): noon slot, wagers 12:10-14:00
+  it("opens the wager window 10 minutes after the predictions and keeps it open that evening", () => {
+    // Saturday 24 Oct 2026, daylight time (UTC-4): noon slot, wagers from 12:10 p.m. to the end of the day
     expect(wagerWindow(Date.parse("2026-10-24T16:05:00Z")).open).toBe(false);
     expect(wagerWindow(Date.parse("2026-10-24T16:10:00Z")).open).toBe(true);
-    expect(wagerWindow(Date.parse("2026-10-24T18:00:00Z")).open).toBe(true);
-    expect(wagerWindow(Date.parse("2026-10-24T18:10:00Z")).open).toBe(false);
+    expect(wagerWindow(Date.parse("2026-10-24T23:40:00Z")).open).toBe(true);
+    // 10:30 p.m. Eastern is already the 25th in UTC, but still Saturday's slate
+    expect(wagerWindow(Date.parse("2026-10-25T02:30:00Z"))).toMatchObject({ open: true, date: "2026-10-24" });
     // Tuesday 1 Dec 2026, standard time (UTC-5): 5:10 p.m. is 22:10 UTC
     expect(wagerWindow(Date.parse("2026-12-01T21:10:00Z")).open).toBe(false);
     expect(wagerWindow(Date.parse("2026-12-01T22:10:00Z"))).toMatchObject({ open: true, date: "2026-12-01", slot: "5:10 p.m. ET" });
