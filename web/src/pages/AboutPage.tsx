@@ -1,9 +1,17 @@
 import Chart from "../components/Chart";
+import { TitleSide } from "../components/ViewToggle";
+import { HBars, SignedBars } from "../components/viz";
 import { useFiles } from "../lib/data";
 import { STAT_LABEL, pct, prettyDate, seasonLabel } from "../lib/format";
+import { HOME, STAT_COLOR } from "../lib/palette";
+import type { Meta, TrackRecord } from "../lib/types";
+import { useView } from "../lib/view";
+
+const GREY = "#9a9995";  // the baselines the model is measured against
 
 export default function AboutPage() {
   const files = useFiles("meta.json", "track_record.json");
+  const view = useView();
   if (!files) return <div className="title-row"><div><h1>Model report</h1><p className="finding muted">Loading…</p></div></div>;
   const meta = files["meta.json"];
   const g = meta.game_metrics;
@@ -25,6 +33,7 @@ export default function AboutPage() {
             Basketball-Reference box scores and game logs, 2019-20 to {prettyDate(meta.data_through)} · rebuilt {new Date(meta.generated_at).toLocaleDateString()}
           </p>
         </div>
+        <TitleSide />
       </div>
 
       <div className="stats">
@@ -34,20 +43,14 @@ export default function AboutPage() {
         <div className="stat"><div className="label">Margin miss</div><div className="value">{g.margin_mae.toFixed(1)}<span className="muted" style={{ fontSize: 14, marginLeft: 4 }}>pts</span></div><div className="note">average, per game</div></div>
       </div>
 
+      {view === "charts" ? <ReportCharts meta={meta} live={live} /> : (
       <div className="grid">
         <section className="panel span-3" aria-labelledby="cal">
           <div className="chart-head">
             <h2 id="cal">Calibration</h2>
-            <span className="legend"><span><i style={{ background: "var(--hue)" }} />Home teams' actual win rate</span><span><i style={{ background: "var(--chart-2)" }} />Predicted</span></span>
+            <CalibrationLegend />
           </div>
-          <Chart label="Predicted against actual home win rate by probability bucket" deps={[g.calibration]}
-            draw={(el, C) => C.line(el, {
-              labels: g.calibration.map((c) => pct(c.p)),
-              series: [{ name: "Actual", values: g.calibration.map((c) => c.actual) },
-                       { name: "Predicted", values: g.calibration.map((c) => c.p) }],
-              format: C.fmt.pct(0), yTicks: [0, 0.25, 0.5, 0.75, 1], height: 220,
-            })} />
-          <p className="small muted" style={{ marginTop: 8 }}>Games grouped by the model's home win probability. Where the lines meet, a 70% call won 70% of the time.</p>
+          <Calibration calibration={g.calibration} />
         </section>
 
         <section className="panel span-3" aria-labelledby="miss">
@@ -115,7 +118,10 @@ export default function AboutPage() {
             </div>
           )}
         </section>
+      </div>
+      )}
 
+      <div className="grid" style={{ marginTop: "var(--gap)" }}>
         <section className="panel span-6 prose" aria-labelledby="how">
           <header><h2 id="how">How it works</h2></header>
           <p><b>Game predictor.</b> A logistic regression on team Elo ratings, season and last-10 point differential, rest and back-to-backs,
@@ -129,5 +135,91 @@ export default function AboutPage() {
         </section>
       </div>
     </>
+  );
+}
+
+function CalibrationLegend() {
+  return <span className="legend"><span><i style={{ background: HOME }} />Home teams' actual win rate</span><span><i style={{ background: GREY }} />Predicted</span></span>;
+}
+
+function Calibration({ calibration }: { calibration: Meta["game_metrics"]["calibration"] }) {
+  return (
+    <>
+      <Chart label="Predicted against actual home win rate by probability bucket" deps={[calibration]}
+        draw={(el, C) => C.line(el, {
+          labels: calibration.map((c) => pct(c.p)),
+          series: [{ name: "Actual", values: calibration.map((c) => c.actual), colour: HOME },
+                   { name: "Predicted", values: calibration.map((c) => c.p), colour: GREY }],
+          format: C.fmt.pct(0), yTicks: [0, 0.25, 0.5, 0.75, 1], height: 220,
+        })} />
+      <p className="small muted" style={{ marginTop: 8 }}>Games grouped by the model's home win probability. Where the lines meet, a 70% call won 70% of the time.</p>
+    </>
+  );
+}
+
+/** The report as charts: game model against simpler rules, player model against the last-10 average, the live record. */
+function ReportCharts({ meta, live }: { meta: Meta; live: TrackRecord }) {
+  const g = meta.game_metrics;
+  const pm = meta.player_metrics;
+  const stats = Object.keys(pm);
+  const edge = (s: string) => (100 * (pm[s].last10_mae - pm[s].mae)) / pm[s].last10_mae;
+  const signedPct = (v: number) => `${v > 0 ? "+" : v < 0 ? "\u2212" : ""}${Math.abs(v).toFixed(1)}%`;
+  return (
+    <div className="grid">
+      <section className="panel span-3" aria-labelledby="cal">
+        <div className="chart-head"><h2 id="cal">Calibration</h2><CalibrationLegend /></div>
+        <Calibration calibration={g.calibration} />
+      </section>
+
+      <section className="panel span-3" aria-labelledby="vs-rules">
+        <header><h2 id="vs-rules">Winners picked, {seasonLabel(g.test_season)}</h2><span className="meta">{g.games.toLocaleString()} games</span></header>
+        <HBars max={100} format={(v) => `${v.toFixed(1)}%`} rows={[
+          { label: "This model", value: 100 * g.accuracy, color: HOME },
+          { label: "Elo alone", value: 100 * g.elo_accuracy, color: GREY },
+          { label: "Always home", value: 100 * g.home_accuracy, color: GREY },
+          { label: "Coin flip", value: 50, color: "#d4d3d0" },
+        ]} />
+        <p className="small muted" style={{ marginTop: 10 }}>Same games, same season; the model adds lineups, form and rest to the Elo ratings.</p>
+      </section>
+
+      <section className="panel span-3" aria-labelledby="edge">
+        <header><h2 id="edge">Player model edge by stat</h2><span className="meta">smaller miss than the last-10 average</span></header>
+        <SignedBars format={signedPct} scale={Math.max(...stats.map((s) => Math.abs(edge(s))), 5)}
+          rows={stats.map((s) => ({
+            label: STAT_LABEL[s], value: edge(s), color: STAT_COLOR[s],
+            tip: <><b>{STAT_LABEL[s]}</b><br />model misses by {pm[s].mae.toFixed(2)}<br />last-10 average by {pm[s].last10_mae.toFixed(2)}</>,
+          }))} />
+        <div className="signed-axis"><span>last 10 better</span><span>model better</span></div>
+      </section>
+
+      <section className="panel span-3" aria-labelledby="cover">
+        <header><h2 id="cover">Results inside the likely range</h2><span className="meta">aim: 80%</span></header>
+        <HBars max={100} format={(v) => `${Math.round(v)}%`}
+          rows={stats.map((s) => ({ label: STAT_LABEL[s], value: 100 * pm[s].coverage, color: STAT_COLOR[s], note: "aim 80%" }))} />
+        <p className="small muted" style={{ marginTop: 10 }}>Whole-number stats like steals and blocks land inside more often than 8 in 10.</p>
+      </section>
+
+      <section className="panel span-6" aria-labelledby="live">
+        <header>
+          <h2 id="live">Live track record</h2>
+          <span className="meta">{live.since ? `calls logged before tip-off since ${prettyDate(live.since)}` : "not started"}</span>
+        </header>
+        {live.games && live.correct !== undefined ? (
+          <div className="tile-row">
+            <div className="tile"><div className="label">Winners picked</div><div className="value">{pct(live.correct / live.games, 1)}</div>
+              <div className="small muted">{live.correct} of {live.games} · backtest {pct(g.accuracy, 1)}</div></div>
+            <div className="tile"><div className="label">Log loss</div><div className="value">{live.log_loss!.toFixed(3)}</div>
+              <div className="small muted">backtest {g.log_loss.toFixed(3)} · lower is better</div></div>
+            <div className="tile"><div className="label">Margin miss</div><div className="value">{live.margin_mae!.toFixed(1)} pts</div>
+              <div className="small muted">backtest {g.margin_mae.toFixed(1)} pts</div></div>
+          </div>
+        ) : (
+          <div className="empty">
+            {live.pending.length ? `${live.pending.length} calls are waiting on results; the first grades land the morning after.`
+              : "A daily job logs a call for every game before tip-off; results appear here once games are played."}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

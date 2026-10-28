@@ -25,12 +25,16 @@ def _iso(t):
     return t.isoformat().replace("+00:00", "Z") if hasattr(t, "isoformat") else str(t)
 
 
+# A model hash can look like a number ("12345678", "1e345678") to type inference, until one doesn't
+_TEXT = {"model": pl.String}
+
+
 def track_record(games, logs, pred_dir=PRED_DIR):
     """Summary, this season's graded calls and pending calls, as a JSON-ready dict."""
     gpath, ppath = pred_dir / "games.csv", pred_dir / "players.csv"
     if not gpath.exists():
         return {"games": 0, "pending": [], "log": [], "players": {}}
-    gp = pl.read_csv(gpath, try_parse_dates=True).with_columns(pl.col("date").cast(pl.Date))
+    gp = pl.read_csv(gpath, try_parse_dates=True, schema_overrides=_TEXT).with_columns(pl.col("date").cast(pl.Date))
     results = games.select("date", visitor="visitor_abbr", home="home_abbr", visitor_pts="visitor_pts", home_pts="home_pts")
     joined = gp.join(results, on=["date", "visitor", "home"], how="left").sort("date", "home")
     graded = joined.filter(pl.col("home_pts").is_not_null()).with_columns(
@@ -59,7 +63,7 @@ def track_record(games, logs, pred_dir=PRED_DIR):
 
     out["players"] = {}
     if ppath.exists():
-        pp = pl.read_csv(ppath, try_parse_dates=True).with_columns(pl.col("date").cast(pl.Date))
+        pp = pl.read_csv(ppath, try_parse_dates=True, schema_overrides=_TEXT).with_columns(pl.col("date").cast(pl.Date))
         actual = logs.filter("played").select("player_id", "date", *[pl.col(s).alias(f"actual_{s}") for s in TARGETS])
         pg = pp.join(actual, on=["player_id", "date"], how="inner")
         out["player_games"] = pg.height

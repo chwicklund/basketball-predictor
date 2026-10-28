@@ -14,10 +14,11 @@ const SUFFIX = new Set(["Jr.", "Sr.", "II", "III", "IV"]);
 const surname = (name: string) => name.split(" ").filter((w) => !SUFFIX.has(w)).slice(-1)[0];
 
 /** A team's rotation as 240 minutes split by who plays, with each player's toggle. */
-export default function RosterCard({ team, abbr, toggles, onChange, reported = [], report = null }: {
+export default function RosterCard({ team, abbr, toggles, onChange, reported = [], report = null, color }: {
   team: TeamState; abbr: string; toggles: Toggles; onChange: (t: Toggles) => void;
   reported?: string[];      // players the injury report lists Out or Doubtful
   report?: string | null;   // when that report was published
+  color?: string;           // the team's colour on this screen (away or home)
 }) {
   const playing = (r: RosterEntry) => (r.in_pool && !toggles.out.includes(r.name)) || toggles.add.includes(r.name);
   const lineup = team.roster.filter(playing);
@@ -60,7 +61,7 @@ export default function RosterCard({ team, abbr, toggles, onChange, reported = [
           <div className="strip" role="img" aria-label={`${TEAM_MIN} minutes: ${lineup.map((r) => `${r.name} ${Math.round(alloc(r))}`).join(", ")}`}>
             {strip.map((r) => (
               <span key={r.name} className="seg" title={`${r.name}: ${one(alloc(r))} min`}
-                style={{ flexGrow: alloc(r), flexBasis: 0, padding: alloc(r) ? undefined : 0 }}>
+                style={{ flexGrow: alloc(r), flexBasis: 0, padding: alloc(r) ? undefined : 0, background: color }}>
                 {alloc(r) >= LABEL_MIN ? surname(r.name) : ""}
               </span>
             ))}
